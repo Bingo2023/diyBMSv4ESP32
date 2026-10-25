@@ -200,6 +200,33 @@ function switchPage(newPage) {
     $("#myNav").height("0%");
 }
 
+// Spalte "Firmware" auf der Seite Module: Pruefsumme der Firmware je Modul (FW_CMD_REPORT)
+var moduleFwCrc = [];
+function modulesFwFill() {
+    // haeufigste Pruefsumme ermitteln, abweichende Module markieren
+    var count = {}, best = "", bestn = 0;
+    $.each(moduleFwCrc, function (i, c) { if (c) { count[c] = (count[c] || 0) + 1; if (count[c] > bestn) { bestn = count[c]; best = c; } } });
+    $("#modulesRows > tr").each(function (index) {
+        var td = $(this).find("td.fw");
+        var c = index < moduleFwCrc.length ? moduleFwCrc[index] : "";
+        td.text(c ? c : "\u2013").toggleClass("crcdiff", !!c && c !== best);
+    });
+}
+function modulesFwRefresh() {
+    $.ajax({ type: "GET", url: "/api/modfwstatus", dataType: "json", timeout: 3000, cache: false })
+        .done(function (d) {
+            moduleFwCrc = d.fwcrc || [];
+            modulesFwFill();
+            if (d.fwcrcbusy == 1 && $('#modulesPage').is(':visible')) {
+                $("#modcheckinfo").text("Pr\u00fcfe Module \u2026");
+                setTimeout(modulesFwRefresh, 700);
+            } else if (d.fwcrcage >= 0) {
+                $("#modcheckinfo").text("Zuletzt gepr\u00fcft vor " + d.fwcrcage + " s.");
+                $("#ModCheckFw").prop('disabled', false);
+            }
+        });
+}
+
 function identifyModule(button, cellid) {
     $.getJSON("/api/identifyModule", { c: cellid }, function (data) { showActionSuccess(); }).fail(function () { $("#iperror").show(); });
 }
@@ -889,9 +916,11 @@ function updateChart(jsondata) {
                     + bank[index]
                     + "</td><td>" + value + "</td><td></td><td class='hide'></td><td class='hide'></td>"
                     + "<td class='hide'></td><td class='hide'></td><td class='hide'></td><td class='hide'></td><td class='hide'></td><td class='hide'></td>"
+                    + "<td class='fw'></td>"
                     + "<td><button type='button' onclick='return identifyModule(this," + index + ");'>Identify</button>"
                     + "<button type='button' onclick='return configureModule(this," + index + ",10);'>Configure</button></td></tr>")
             });
+            modulesFwFill();
         }
 
         var rows = $(tbody).find("tr");
@@ -1491,6 +1520,7 @@ $(function () {
         $("#settingConfig").hide();
 
         switchPage("#modulesPage");
+        modulesFwRefresh();
 
         $.getJSON("/api/settings",
             function (data) {
@@ -2012,6 +2042,15 @@ $(function () {
             }
         });
     }
+
+    // Seite Module: Firmware-Pruefsumme aller Module abfragen
+    $("#ModCheckFw").click(function () {
+        $("#ModCheckFw").prop('disabled', true);
+        $("#modcheckinfo").text("Pr\u00fcfe Module \u2026");
+        $.ajax({ type: 'POST', url: '/post/modfwcheck', data: {}, timeout: 10000 })
+            .always(function () { setTimeout(modulesFwRefresh, 700); });
+        return true;
+    });
 
     $("#ModFwCheck").click(function () {
         $.ajax({ type: 'POST', url: '/post/modfwcheck', data: {}, timeout: 10000 })
