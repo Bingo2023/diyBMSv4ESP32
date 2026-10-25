@@ -358,6 +358,7 @@
   <div class="page" id="modulesPage">
     <h1>Modules</h1>
     <div class="region wide">
+      <p id="modfwdiff" class="warning"></p>
       <table id="modulesTable">
         <thead>
           <tr>
@@ -462,24 +463,27 @@
     <div id="globalConfig" class="region">
       <h2>Global Settings</h2>
       <p id="gc1">Configure all modules to use following parameters:</p>
-      <form id="globalSettingsForm" method="POST" action="/post/saveglobalsetting" autocomplete="off">
-        <div class="settings">
-          <div>
-            <label for="g1">Bypass over temperature</label>
-            <input type="number" min="20" max="90" step="1" name="BypassOverTempShutdown" id="g1" value="65"
-              required="" />
+      <div class="gcrow">
+        <form id="globalSettingsForm" method="POST" action="/post/saveglobalsetting" autocomplete="off">
+          <div class="settings">
+            <div>
+              <label for="g1">Bypass over temperature</label>
+              <input type="number" min="20" max="90" step="1" name="BypassOverTempShutdown" id="g1" value="65"
+                required="" />
+            </div>
+            <div>
+              <label for="g2">Bypass threshold mV</label>
+              <input type="number" min="1800" max="4500" step="5" name="BypassThresholdmV" id="g2" value="4100"
+                required="" />
+            </div>
           </div>
-          <div>
-            <label for="g2">Bypass threshold mV</label>
-            <input type="number" min="1800" max="4500" step="5" name="BypassThresholdmV" id="g2" value="4100"
-              required="" />
-          </div>
+          <button id="globalSettingsButton" type="submit">Save settings</button>
+        </form>
+        <div class="modcheck">
+          <button id="ModCheckFw" type="button">Module pr&uuml;fen</button>
+          <p class="note">Liest die Firmware-Pr&uuml;fsumme aller Module (Spalte &bdquo;Firmware&ldquo;).</p>
+          <p class="note">Zuletzt gepr&uuml;ft: <span id="modcheckinfo">&ndash;</span></p>
         </div>
-        <button id="globalSettingsButton" type="submit">Save settings</button>
-      </form>
-      <div class="modcheck">
-        <button id="ModCheckFw" type="button">Module pr&uuml;fen</button>
-        <span id="modcheckinfo" class="note">Liest die Firmware-Pr&uuml;fsumme aller Module (Spalte &bdquo;Firmware&ldquo;).</span>
       </div>
     </div>
   </div>

@@ -202,6 +202,7 @@ function switchPage(newPage) {
 
 // Spalte "Firmware" auf der Seite Module: Pruefsumme der Firmware je Modul (FW_CMD_REPORT)
 var moduleFwCrc = [];
+var modulesFwNotify = true; // Meldung einmal pro Pruefung
 function modulesFwFill() {
     // haeufigste Pruefsumme ermitteln, abweichende Module markieren
     var count = {}, best = "", bestn = 0;
@@ -211,17 +212,34 @@ function modulesFwFill() {
         var c = index < moduleFwCrc.length ? moduleFwCrc[index] : "";
         td.text(c ? c : "\u2013").toggleClass("crcdiff", !!c && c !== best);
     });
+    // Warnung, wenn Module mit unterschiedlicher Firmware laufen
+    var diff = [];
+    $.each(moduleFwCrc, function (i, c) { if (c && c !== best) { diff.push("Modul " + i + " (" + c + ")"); } });
+    if (diff.length > 0) {
+        $("#modfwdiff").text("Achtung: abweichende Firmware \u2013 " + diff.join(", ") + ". Die meisten Module haben " + best +
+            ". Unter Utilities \u203a ATtiny1624 \u2013 Auto-Update alle Module auf denselben Stand bringen.").show();
+    } else {
+        $("#modfwdiff").hide();
+    }
+    return diff.length;
 }
 function modulesFwRefresh() {
     $.ajax({ type: "GET", url: "/api/modfwstatus", dataType: "json", timeout: 3000, cache: false })
         .done(function (d) {
             moduleFwCrc = d.fwcrc || [];
-            modulesFwFill();
+            var ndiff = modulesFwFill();
+            // nach einer Pruefung zusaetzlich als Meldung oben rechts
+            if (ndiff > 0 && d.fwcrcbusy != 1 && modulesFwNotify) {
+                modulesFwNotify = false;
+                $.notify("Abweichende Firmware in " + ndiff + " Modul(en) \u2013 siehe Seite Module", { autoHide: false, globalPosition: 'top right', className: 'warn' });
+            }
             if (d.fwcrcbusy == 1 && $('#modulesPage').is(':visible')) {
-                $("#modcheckinfo").text("Pr\u00fcfe Module \u2026");
+                $("#modcheckinfo").text("l\u00e4uft \u2026");
                 setTimeout(modulesFwRefresh, 700);
-            } else if (d.fwcrcage >= 0) {
-                $("#modcheckinfo").text("Zuletzt gepr\u00fcft vor " + d.fwcrcage + " s.");
+            } else {
+                // -1 (oder unplausibel) = seit dem Start noch nicht geprueft
+                var age = Number(d.fwcrcage);
+                $("#modcheckinfo").text(age >= 0 && age < 10000000 ? "vor " + age + " s" : "\u2013");
                 $("#ModCheckFw").prop('disabled', false);
             }
         });
@@ -2046,7 +2064,8 @@ $(function () {
     // Seite Module: Firmware-Pruefsumme aller Module abfragen
     $("#ModCheckFw").click(function () {
         $("#ModCheckFw").prop('disabled', true);
-        $("#modcheckinfo").text("Pr\u00fcfe Module \u2026");
+        modulesFwNotify = true;
+        $("#modcheckinfo").text("l\u00e4uft \u2026");
         $.ajax({ type: 'POST', url: '/post/modfwcheck', data: {}, timeout: 10000 })
             .always(function () { setTimeout(modulesFwRefresh, 700); });
         return true;
@@ -2732,6 +2751,8 @@ $(function () {
 
     //On page ready
     queryBMS();
+    // abweichende Modul-Firmware (letzte Pruefung) auf jeder Seite melden
+    setTimeout(modulesFwRefresh, 3000);
 
     //Automatically open correct sub-page based on hash
     let hash = $(location).attr('hash');
