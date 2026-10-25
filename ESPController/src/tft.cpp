@@ -458,6 +458,15 @@ void init_tft_display()
     DrawTFT_ControlState();
 
     hal.TFTScreenBacklight(true);
+
+    // Display ist an -> auch als "wach" fuehren, sonst aktualisiert die Anzeigeaufgabe nichts
+    // und das Startbild (mit "WIFI not connected") bleibt stehen, bis jemand antippt.
+    // Nach 120 s geht das Display wie nach einem Antippen aus.
+    _lastScreenToDisplay = ScreenTemplateToDisplay::State;
+    _ScreenToDisplayDelay = 0;
+    _ScreenPageCounter = 0;
+    tftsleep_timer = 120;
+    _screen_awake = true;
 }
 
 // This task switches on/off the TFT screen, and triggers a redraw of its contents
@@ -1183,6 +1192,16 @@ void updatetftdisplay_task(void *param)
             tft.setTextDatum(TL_DATUM);
 
             ScreenTemplateToDisplay screenToDisplay = WhatScreenToDisplay();
+
+            // WLAN-Zeile (unten) wird nur beim Aufbau des Bildschirms gezeichnet. Beim Start
+            // ist das WLAN noch nicht verbunden -> bei jeder Aenderung neu aufbauen, sonst
+            // bleibt "WIFI not connected" stehen, bis jemand das Display antippt.
+            static bool _lastWifiState = false;
+            if (_lastWifiState != wifi_isconnected)
+            {
+                _lastWifiState = wifi_isconnected;
+                force = 1;
+            }
 
             // Force will "force" a redraw of the full screen regardless
             // of previous state.
