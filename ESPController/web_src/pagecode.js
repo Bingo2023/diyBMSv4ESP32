@@ -1925,6 +1925,20 @@ $(function () {
         return sel.length ? String(sel.data("crc") || "") : "";
     }
 
+    // Fortschrittsbalken: nach oben weich, nach unten (neuer Durchlauf) ohne Animation
+    var modFwLastPct = -1;
+    function modFwSetBar(pct) {
+        var bar = $("#modfwprog > div");
+        if (pct < modFwLastPct) {
+            bar.css("transition", "none").css("width", pct + "%");
+            bar[0].offsetWidth; // Neuberechnung erzwingen, dann Animation wieder an
+            bar.css("transition", "");
+        } else {
+            bar.css("width", pct + "%");
+        }
+        modFwLastPct = pct;
+    }
+
     function modFwStatusUpdate() {
         $.getJSON("/api/modfwstatus", function (data) {
             if (data.ctrlbaud) { modFwCtrlBaud = data.ctrlbaud; }
@@ -1953,7 +1967,7 @@ $(function () {
                 head = data.phase;
             }
             $("#modfwhead").html(head);
-            if (data.busy || data.len > 0) { $("#modfwprog").show(); $("#modfwprog > div").css("width", pct + "%"); }
+            if (data.busy || data.len > 0) { $("#modfwprog").show(); modFwSetBar(pct); }
             else { $("#modfwprog").hide(); }
             $("#modfwinfo").text(data.msg ? data.msg : "");
 
@@ -2017,6 +2031,10 @@ $(function () {
             return true;
         }
         $("#ModFwStart").prop('disabled', true);
+        // alten Stand ("Fertig", 100 %) sofort zuruecksetzen, nicht erst bei der ersten Statusabfrage
+        $("#modfwprog").show(); modFwSetBar(0);
+        $("#modfwhead").html("<strong>Start</strong> &ndash; Versionsvergleich &hellip;");
+        $("#modfwtable tbody").empty();
         $.ajax({ type: 'POST', url: '/post/modfwstart', data: { file: $("#modfwindex").val() }, timeout: 30000 })
             .done(function (data) {
                 $("#modfwinfo").text(data.message);
