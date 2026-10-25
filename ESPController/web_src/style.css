@@ -136,7 +136,6 @@ form input:read-only{background-color:transparent;color:#fff;border:dashed 1px #
 table.mods td,table.mods th{padding:3px 10px;text-align:left}
 td.st5{color:#7CFC00}td.st4{color:#1e90ff}td.st6{color:#ff6347;font-weight:bold}td.st3,td.st0{opacity:.7}
 .modfwupload select,.modfwupload button{margin-left:6px}
-#esp32otaregion{float:none;clear:both;width:auto;min-height:0}
 .page .progcols .region{float:none;width:auto;margin-right:0}
 td.crcok{color:#7CFC00;font-family:monospace}td.crcdiff{color:#ffb347;font-family:monospace}
 .warnline{color:#ffb347;margin:4px 0}
