@@ -15,8 +15,8 @@ $("#about").text("Informationen");
 
 $("#modulesPage > h1").text("Modul Seiten");
 
-$("#globalConfig > h2").text("Globale Einstellungen");
-$("#globalConfig > p").text("Konfigurieren Sie alle Module so, dass sie die folgenden Parameter verwenden:");
+$("#globalConfig > h2").text("Modul Einstellungen");
+$("#globalConfig > p").text("Module reagieren auf folgende Parameter:");
 
 $("#mpBank").text("Gruppe");
 $("#mpModule").text("Modul");

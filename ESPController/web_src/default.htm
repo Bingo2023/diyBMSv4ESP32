@@ -397,12 +397,12 @@
             <div>
               <label for="BypassOverTempShutdown">Bypass over temperature (&deg;C)</label>
               <input type="number" id="BypassOverTempShutdown" value="70" readonly=""
-                title="Wird unter Globale Einstellungen f&uuml;r alle Module gesetzt" />
+                title="Wird unter Modul Einstellungen f&uuml;r alle Module gesetzt" />
             </div>
             <div>
               <label for="BypassThresholdmV">Bypass threshold voltage (mV)</label>
               <input type="number" id="BypassThresholdmV" value="" readonly=""
-                title="Wird unter Globale Einstellungen f&uuml;r alle Module gesetzt" />
+                title="Wird unter Modul Einstellungen f&uuml;r alle Module gesetzt" />
             </div>
             <div>
               <label for="Calib">Calibration multiplier</label>
@@ -461,8 +461,8 @@
       </div>
     </div>
     <div id="globalConfig" class="region">
-      <h2>Global Settings</h2>
-      <p id="gc1">Configure all modules to use following parameters:</p>
+      <h2>Module Settings</h2>
+      <p id="gc1">Modules respond to the following parameters:</p>
       <div class="gcrow">
         <form id="globalSettingsForm" method="POST" action="/post/saveglobalsetting" autocomplete="off">
           <div class="settings">
@@ -477,7 +477,7 @@
                 required="" />
             </div>
           </div>
-          <button id="globalSettingsButton" type="submit">Save settings</button>
+          <button id="globalSettingsButton" type="submit">Save module settings</button>
         </form>
         <div class="modcheck">
           <button id="ModCheckFw" type="button">Module pr&uuml;fen</button>
