@@ -179,6 +179,7 @@ QueueHandle_t reply_q_handle;
 #include "PacketRequestGenerator.h"
 #include "PacketReceiveProcessor.h"
 #include "webserver.h"
+#include "ModuleFirmwareUpdateTask.h"
 
 PacketRequestGenerator prg = PacketRequestGenerator();
 PacketReceiveProcessor receiveProc = PacketReceiveProcessor();
@@ -1060,7 +1061,12 @@ uint16_t minutesSinceMidnight()
 // dumpPacketToDebug('R', &ps);
 #endif
 
-        if (!receiveProc.ProcessReply(&ps))
+        if (ModuleFwUpdate_IsFirmwarePacket(&ps))
+        {
+          // Antwort auf ein Firmware-Update-Paket (Kommando 12/13)
+          ModuleFwUpdate_OnReply(&ps);
+        }
+        else if (!receiveProc.ProcessReply(&ps))
         {
           // Error blue
           LED(RGBLED::Blue);
@@ -1105,11 +1111,32 @@ void onPacketReceived()
     PacketStruct transmitBuffer;
     if (request_q_handle != nullptr)
     {
-      if (xQueueReceive(request_q_handle, &transmitBuffer, portMAX_DELAY) == pdPASS)
+      // Firmware-Update-Pakete haben Vorrang (eigene, kurze Warteschlange),
+      // sonst kurz auf normale Anfragen warten und erneut pruefen
+      bool havePacket = ModuleFwUpdate_NextPacket(&transmitBuffer);
+      if (!havePacket)
+      {
+        havePacket = xQueueReceive(request_q_handle, &transmitBuffer, pdMS_TO_TICKS(ModuleFwUpdate_Busy() ? 5 : 50)) == pdPASS;
+      }
+      if (!havePacket)
+      {
+        continue;
+      }
+
       {
 
-        sequence++;
-        transmitBuffer.sequence = sequence;
+        const bool firmwarePacket = ModuleFwUpdate_IsFirmwarePacket(&transmitBuffer);
+
+        if (!firmwarePacket)
+        {
+          sequence++;
+          transmitBuffer.sequence = sequence;
+        }
+        else if ((transmitBuffer.command & 0x0F) != FW_CMD_DATA)
+        {
+          // Bei FW_CMD_DATA steht in sequence die Blocknummer
+          transmitBuffer.sequence = 0;
+        }
 
         if (transmitBuffer.command == COMMAND::Timing)
         {
@@ -1143,6 +1170,23 @@ void onPacketReceived()
       else if (mysettings.baudRate == 5000)
       {
         delay_ms = 700;
+      }
+
+      if (ModuleFwUpdate_Busy() && !ModuleFwUpdate_IsFirmwarePacket(&transmitBuffer))
+      {
+        // Waehrend des Updates: normale Abfragen nur kurz abwarten (die Module antworten sofort)
+        delay_ms = 300;
+      }
+
+      if (ModuleFwUpdate_IsFirmwarePacket(&transmitBuffer))
+      {
+        // Firmware-Update: Paketlaenge + kurze Pause, die Module leiten nur weiter
+        delay_ms = ModuleFwUpdate_PacketIntervalMs();
+        if ((transmitBuffer.command & 0x0F) == FW_CMD_CONTROL && (transmitBuffer.moduledata[FW_MD_SUB] & 0xFF) == FW_ANNOUNCE)
+        {
+          // Versionsvergleich: jedes Modul rechnet die CRC32 seines Flash (ca. 0,1 s)
+          delay_ms = 1000;
+        }
       }
 
       // Delay whilst cell module processes request
@@ -1463,6 +1507,15 @@ void pulse_relay_off(const TimerHandle_t)
 
       // Request voltage, but if queue is full, sleep and try again (other threads will reduce the queue)
       prg.sendCellVoltageRequest(startmodule, endmodule);
+
+      if (ModuleFwUpdate_Busy())
+      {
+        // Waehrend des Modul-Firmware-Updates nur die Spannungen ueberwachen
+        startmodule = endmodule + 1;
+        i += maximum_cell_modules_per_packet;
+        continue;
+      }
+
       // Same for temperature
       prg.sendCellTemperatureRequest(startmodule, endmodule);
 
@@ -3213,6 +3266,7 @@ void CalculateStateOfHealth(diybms_eeprom_settings *settings)
   int year_day = -1;
   time_t snapshot_time = 0;
 
+  bool fwupdate_was_busy = false;
   for (;;)
   {
     // TODO: Perhaps this should be based on some improved logic - based on number of modules in system?
@@ -3221,6 +3275,22 @@ void CalculateStateOfHealth(diybms_eeprom_settings *settings)
     // ESP_LOGI(TAG, "Sleep");
     auto delay_ticks = pdMS_TO_TICKS(5500);
     vTaskDelay(delay_ticks);
+
+    if (ModuleFwUpdate_Busy())
+    {
+      // Waehrend des Modul-Firmware-Updates nur Spannung/Temperatur abfragen (enqueue_task)
+      fwupdate_was_busy = true;
+      continue;
+    }
+    if (fwupdate_was_busy)
+    {
+      // Nach dem Update Version/Einstellungen aller Module neu einlesen
+      fwupdate_was_busy = false;
+      for (uint8_t module = 0; module < TotalNumberOfCells(); module++)
+      {
+        cmi[module].settingsCached = false;
+      }
+    }
 
     // Task 1
     ESP_LOGI(TAG, "Task 1");
@@ -3932,6 +4002,10 @@ ESP32 Chip model = %u, Rev %u, Cores=%u, Features=%u)",
   request_q_handle = xQueueCreate(30, sizeof(PacketStruct));
   assert(request_q_handle);
   prg.setQueueHandle(request_q_handle);
+
+  // Firmware-Update der Module ueber die RX/TX-Kette
+  ModuleFwUpdate_Init(request_q_handle);
+  ModuleFwUpdate_SetControllerBaud(mysettings.baudRate);
 
   reply_q_handle = xQueueCreate(4, sizeof(PacketStruct));
   assert(reply_q_handle);

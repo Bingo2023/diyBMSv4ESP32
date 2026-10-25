@@ -9,6 +9,7 @@ static constexpr const char *const TAG = "diybms-web";
 
 #include "webserver.h"
 #include "esp32_ota.h"
+#include "ModuleFirmwareUpdateTask.h"
 #include "webserver_helper_funcs.h"
 #include "webserver_json_requests.h"
 #include "webserver_json_post.h"
@@ -432,6 +433,7 @@ static const httpd_uri_t uri_api_get = {.uri = "/api/*", .method = HTTP_GET, .ha
 static const httpd_uri_t uri_download_get = {.uri = "/download", .method = HTTP_GET, .handler = content_handler_downloadfile, .user_ctx = NULL};
 static const httpd_uri_t uri_coredump_get = {.uri = "/coredump", .method = HTTP_GET, .handler = content_handler_coredumpdownloadfile, .user_ctx = NULL};
 
+static const httpd_uri_t uri_modfw_upload_post = {.uri = "/upload/modfw", .method = HTTP_POST, .handler = ModuleFwUpdate_UploadHandler, .user_ctx = NULL};
 static const httpd_uri_t uri_save_data_post = {.uri = "/post/*", .method = HTTP_POST, .handler = save_data_handler, .user_ctx = NULL};
 static const httpd_uri_t uri_static_content_get = {.uri = "*", .method = HTTP_GET, .handler = static_content_handler, .user_ctx = NULL};
 
@@ -522,7 +524,7 @@ httpd_handle_t start_webserver(void)
   /* Generate default configuration */
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
-  config.max_uri_handlers = 11;
+  config.max_uri_handlers = 12;
   config.max_open_sockets = 8;
   config.max_resp_headers = 16;
   config.stack_size = 6250;
@@ -546,6 +548,8 @@ httpd_handle_t start_webserver(void)
 
     // Post services
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &uri_save_data_post));
+    // Modul-Firmware hochladen (Ketten-Update)
+    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &uri_modfw_upload_post));
 
     // OTA services
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &uri_ota_post));

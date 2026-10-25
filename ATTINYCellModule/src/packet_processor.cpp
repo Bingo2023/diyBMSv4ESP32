@@ -407,6 +407,27 @@ bool PacketProcessor::processPacket(PacketStruct *buffer)
     MilliAmpHourBalanceCounter = 0;
     return true;
   }
+
+#if defined(__AVR_ATtinyx24__)
+  // Nur tinyAVR-2 (V450): der ATtiny841 hat keinen Platz fuer Bootloader und Update-Code
+  case COMMAND::FirmwareControl:
+  {
+    // Versionsvergleich / Bootloader anfordern
+    bool enterBoot = false;
+    bool processed = FwUpdate_HandleControl(buffer, mymoduleaddress, &enterBoot);
+    if (enterBoot)
+    {
+      EnterBootloaderRequested = true;
+    }
+    return processed;
+  }
+
+  case COMMAND::FirmwareReport:
+  {
+    // Pruefsumme der eigenen Firmware melden (beim Start berechnet)
+    return FwUpdate_HandleReport(buffer, mymoduleaddress);
+  }
+#endif
   }
 
   return false;

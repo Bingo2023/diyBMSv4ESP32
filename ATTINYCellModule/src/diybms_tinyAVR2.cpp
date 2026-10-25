@@ -60,9 +60,18 @@ void diyBMSHAL::FlashNotificationLed(size_t times, uint32_t milliseconds)
   }
 }
 
+// Testvarianten (V450_BL_*_TEST) blinken beim Einschalten 20x schnell statt 4x langsam
+// -> am Modul sofort sichtbar, ob das Ketten-Update geklappt hat
+#ifndef POWERON_FLASHES
+#define POWERON_FLASHES 4
+#endif
+#ifndef POWERON_FLASH_MS
+#define POWERON_FLASH_MS 150
+#endif
+
 void diyBMSHAL::PowerOn_Notification_led()
 {
-  FlashNotificationLed(4, 150);
+  FlashNotificationLed(POWERON_FLASHES, POWERON_FLASH_MS);
 }
 
 void diyBMSHAL::double_tap_Notification_led()

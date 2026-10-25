@@ -1909,6 +1909,255 @@ $(function () {
 
         $("#setsoc").val(75.5);
         otaRefreshCurrent();
+        avrProgLoad();
+    });
+
+    var modFwResultText = ["keine Antwort", "ohne Bootloader", "aktuell", "wartet", "l&auml;uft", "aktualisiert", "FEHLER"];
+
+    // alle Zeiten in Sekunden
+    function modFwFmtTime(sec) {
+        return Math.max(0, Math.round(sec || 0)) + " s";
+    }
+
+    // CRC32 der aktuell gewaehlten Firmware (zum Vergleich mit den Modulen)
+    function modFwSelectedCrc() {
+        var sel = $("input[name=modfwsel]:checked");
+        return sel.length ? String(sel.data("crc") || "") : "";
+    }
+
+    function modFwStatusUpdate() {
+        $.getJSON("/api/modfwstatus", function (data) {
+            if (data.ctrlbaud) { modFwCtrlBaud = data.ctrlbaud; }
+            var head = "";
+            var pct = 0;
+            var elapsed = Math.round((data.elapsed || 0) / 1000);
+            if (data.busy) {
+                var n = data.modules ? data.modules.length : 0;
+                head = "<strong>Modul " + data.module + "</strong> (" + (data.module + 1) + " von " + n + ") &ndash; " + data.phase;
+                if (data.chunks > 0 && data.phase.indexOf("bertragung") >= 0) {
+                    head += " " + Math.round(100 * data.acked / data.chunks) + " %";
+                }
+                if (data.eta) {
+                    head += "<br/>Gesamt: " + modFwFmtTime(elapsed) + " von ca. " + modFwFmtTime(elapsed + data.eta);
+                } else {
+                    head += "<br/>Gesamt: " + modFwFmtTime(elapsed);
+                }
+                var todo = data.todo > 0 ? data.todo : 1;
+                var cur = data.chunks > 0 ? data.acked / data.chunks : 0;
+                pct = Math.min(100, Math.round(100 * (data.updated + data.failed + cur) / todo));
+            } else if (data.len > 0) {
+                head = "<strong>" + data.phase + "</strong> &ndash; " + data.updated + " von " + data.todo + " aktualisiert, " +
+                    data.failed + " Fehler, Gesamt " + modFwFmtTime(elapsed);
+                pct = 100;
+            } else {
+                head = data.phase;
+            }
+            $("#modfwhead").html(head);
+            if (data.busy || data.len > 0) { $("#modfwprog").show(); $("#modfwprog > div").css("width", pct + "%"); }
+            else { $("#modfwprog").hide(); }
+            $("#modfwinfo").text(data.msg ? data.msg : "");
+
+            var mods = data.modules || [];
+            var crcs = data.fwcrc || [];
+            var count = Math.max(mods.length, crcs.length);
+            var want = modFwSelectedCrc();
+            var rows = [];
+            for (var index = 0; index < count; index++) {
+                var value = index < mods.length ? mods[index] : -1;
+                var crc = index < crcs.length ? crcs[index] : "";
+                var last = rows.length ? rows[rows.length - 1] : null;
+                // aufeinanderfolgende wartende Module ohne Pruefsumme zusammenfassen (z.B. "3-15 wartet")
+                if (value == 3 && crc === "" && last && last.v == 3 && last.crc === "") { last.to = index; continue; }
+                rows.push({ from: index, to: index, v: value, crc: crc });
+            }
+            var tb = $("#modfwtable tbody");
+            tb.empty();
+            $.each(rows, function (k, row) {
+                var index = row.from, value = row.v;
+                var st = value >= 0 ? (modFwResultText[value] || value) : "&ndash;";
+                if (value == 4 && data.busy && index == data.module && data.chunks > 0) {
+                    st += " " + Math.round(100 * data.acked / data.chunks) + " %";
+                }
+                var secs = data.secs ? data.secs[index] : 0;
+                var rtx = data.rtx ? data.rtx[index] : 0;
+                var tr = $("<tr></tr>");
+                tr.append($("<td></td>").text(row.to > row.from ? row.from + "–" + row.to : index));
+                tr.append($("<td></td>").addClass("st" + value).html(st));
+                tr.append($("<td></td>").text(secs ? modFwFmtTime(secs) : ""));
+                tr.append($("<td></td>").text((value == 5 || value == 6 || value == 4) ? rtx : ""));
+                var ctd = $("<td></td>");
+                if (row.crc !== "") {
+                    ctd.text(row.crc);
+                    if (want !== "") { ctd.addClass(row.crc == want ? "crcok" : "crcdiff"); }
+                } else if (index < crcs.length) {
+                    ctd.html(data.fwcrcbusy ? "&hellip;" : "&ndash;");
+                }
+                tr.append(ctd);
+                tb.append(tr);
+            });
+
+            $("#ModFwStart").prop('disabled', data.busy == 1 || $("#modfwindex").val() === "");
+            if ((data.busy == 1 || data.fwcrcbusy == 1) && $("#utilityPage").is(":visible")) {
+                setTimeout(modFwStatusUpdate, data.busy == 1 ? 2000 : 700);
+            }
+        });
+    }
+
+    $("#ModFwCheck").click(function () {
+        $.ajax({ type: 'POST', url: '/post/modfwcheck', data: {}, timeout: 10000 })
+            .always(function () { setTimeout(modFwStatusUpdate, 700); setTimeout(modFwStatusUpdate, 2500); });
+        return true;
+    });
+
+    $("#ModFwStart").click(function () {
+        var sel = $("input[name=modfwsel]:checked");
+        if (sel.length == 0) { $("#modfwinfo").text("Bitte zuerst eine Firmware ausw\u00e4hlen."); return true; }
+        if (!sel.data("fits")) {
+            $("#modfwinfo").text("Nicht gestartet: Firmware f\u00fcr " + sel.data("baud") + " Baud, Controller l\u00e4uft mit " + modFwCtrlBaud + " Baud.");
+            return true;
+        }
+        $("#ModFwStart").prop('disabled', true);
+        $.ajax({ type: 'POST', url: '/post/modfwstart', data: { file: $("#modfwindex").val() }, timeout: 30000 })
+            .done(function (data) {
+                $("#modfwinfo").text(data.message);
+                if (data.started) { setTimeout(modFwStatusUpdate, 1000); }
+                else { $("#ModFwStart").prop('disabled', false); }
+            })
+            .fail(function () { $("#modfwinfo").html("Fehler"); $("#ModFwStart").prop('disabled', false); });
+        return true;
+    });
+
+    $("#ModFwAbort").click(function () {
+        $.ajax({ type: 'POST', url: '/post/modfwabort', data: {}, timeout: 10000 })
+            .always(function () { setTimeout(modFwStatusUpdate, 500); });
+        return true;
+    });
+
+    var modFwCtrlBaud = 0;
+
+    function modFwRenderList(list) {
+        var box = $("#modfwfiles");
+        var keep = $("#modfwindex").val();
+        box.empty();
+        var count = 0;
+        $.each(list, function (index, value) {
+            if (value.chain != 1) { return; }
+            count++;
+            var fits = (modFwCtrlBaud == 0 || value.baud == modFwCtrlBaud);
+            var opt = $("<div class='modfwopt'></div>");
+            var rb = $("<input type='radio' name='modfwsel'>").val(index).data("fits", fits).data("baud", value.baud).data("crc", value.crc32 || "");
+            var info = $("<span class='info'></span>");
+            info.append($("<span></span>").text(value.board + (value.upload ? "  (hochgeladen)" : "")));
+            info.append($("<span class='sub'></span>").text("Version " + value.ver + " – " + value.len + " Byte – " + value.baud + " Baud" +
+                (fits ? "" : "  – passt nicht zur Controller-Baudrate " + modFwCtrlBaud)));
+            opt.append(rb).append(info);
+            var del = $("<button type='button' class='del'>Entfernen</button>").on("click", function (ev) {
+                ev.preventDefault(); ev.stopPropagation();
+                if (!confirm("Firmware '" + value.board + "' aus der Liste entfernen?")) { return; }
+                $.ajax({ type: 'POST', url: '/post/modfwdelete', data: { file: index }, timeout: 10000 })
+                    .done(function (d) { $("#modfwuploadinfo").text(d.message); $("#modfwindex").val(""); modFwReloadList(); })
+                    .fail(function () { $("#modfwuploadinfo").text("Entfernen fehlgeschlagen"); });
+            });
+            opt.append(del);
+            if (!fits) { opt.addClass("warn"); }
+            opt.on("click", function () { if (!rb.prop("checked")) { rb.prop("checked", true).trigger("change"); } });
+            rb.on("change", function () {
+                $(".modfwopt").removeClass("sel");
+                opt.addClass("sel");
+                $("#modfwindex").val(index);
+                $("#ModFwStart").prop('disabled', false);
+                modFwStatusUpdate();
+                $("#modfwwarn").text(fits ? "" : "Achtung: Diese Firmware ist f\u00fcr " + value.baud + " Baud, der Controller l\u00e4uft mit " + modFwCtrlBaud +
+                    " Baud. Erst unter Einstellungen die Baudrate umstellen, sonst wird das Update abgelehnt.");
+            });
+            if (String(index) === keep) { rb.prop("checked", true); opt.addClass("sel"); }
+            box.append(opt);
+        });
+        if (count == 0) {
+            box.append($("<p></p>").text("Keine Firmware für das Ketten-Update vorhanden – unten eine Datei hinzufügen."));
+        }
+        if ($("input[name=modfwsel]:checked").length == 0) {
+            $("#modfwindex").val("");
+            $("#ModFwStart").prop('disabled', true);
+        }
+    }
+
+    function modFwReloadList() {
+        $.getJSON("/api/modfwstatus", function (st) {
+            if (st.ctrlbaud) {
+                modFwCtrlBaud = st.ctrlbaud;
+                $("#modfwbaud").val(String(st.ctrlbaud));
+            }
+            $.getJSON("/api/avrstorage", function (data) {
+                modFwRenderList((data.avrprog && data.avrprog.avrprog) ? data.avrprog.avrprog : []);
+            });
+        });
+    }
+
+    // Intel-HEX -> Binaer ab 0x0600 (Bootloader-Bereich wird weggelassen)
+    function modFwHexToBin(text) {
+        var mem = {}, base = 0, lo = 0x10000, hi = 0;
+        var lines = text.split(/\r?\n/);
+        for (var k = 0; k < lines.length; k++) {
+            var l = lines[k].trim();
+            if (l.length == 0) { continue; }
+            if (l[0] != ':') { throw "Keine Intel-HEX-Datei"; }
+            var b = [];
+            for (var q = 1; q + 1 < l.length; q += 2) { b.push(parseInt(l.substr(q, 2), 16)); }
+            var sum = 0; for (var q2 = 0; q2 < b.length; q2++) { sum = (sum + b[q2]) & 0xFF; }
+            if (sum != 0) { throw "Prüfsummenfehler in Zeile " + (k + 1); }
+            var n = b[0], addr = (b[1] << 8) | b[2], type = b[3];
+            if (type == 0) {
+                for (var x = 0; x < n; x++) {
+                    var a = base + addr + x;
+                    if (a < 0x600) { continue; }
+                    mem[a] = b[4 + x];
+                    if (a < lo) { lo = a; }
+                    if (a + 1 > hi) { hi = a + 1; }
+                }
+            } else if (type == 1) { break; }
+            else if (type == 2) { base = ((b[4] << 8) | b[5]) << 4; }
+            else if (type == 4) { base = ((b[4] << 8) | b[5]) << 16; }
+        }
+        if (hi == 0) { throw "Keine Daten ab Adresse 0x0600 – ist das eine V450_BL-Firmware?"; }
+        if (lo != 0x600) { throw "Firmware beginnt bei 0x" + lo.toString(16) + " statt 0x600"; }
+        var out = new Uint8Array(hi - 0x600);
+        out.fill(0xFF);
+        for (var key in mem) { out[key - 0x600] = mem[key]; }
+        return out;
+    }
+
+    $("#ModFwUpload").click(function () {
+        var f = $("#modfwfile")[0].files[0];
+        if (!f) { $("#modfwuploadinfo").text("Bitte zuerst eine Datei wählen."); return true; }
+        var isHex = /\.hex$/i.test(f.name);
+        var reader = new FileReader();
+        reader.onload = function () {
+            var bin;
+            try {
+                bin = isHex ? modFwHexToBin(reader.result) : new Uint8Array(reader.result);
+            } catch (e) { $("#modfwuploadinfo").text("Fehler: " + e); return; }
+            if (bin.length < 2 || bin[0] != 0x0C || bin[1] != 0x94) {
+                $("#modfwuploadinfo").text("Fehler: Datei ist keine Modul-Firmware ab 0x0600 (V450_BL_*-Variante verwenden).");
+                return;
+            }
+            if (bin.length > 14848) { $("#modfwuploadinfo").text("Fehler: Firmware zu groß (" + bin.length + " Byte, max. 14848)."); return; }
+            var label = f.name.replace(/\.(bin|hex)$/i, "").replace(/_mit_bootloader$/i, "").replace(/[^A-Za-z0-9_.-]/g, "_").substr(0, 26);
+            var url = "/upload/modfw?xss=" + encodeURIComponent(XSS_KEY) + "&name=" + encodeURIComponent(label) + "&baud=" + $("#modfwbaud").val();
+            $("#ModFwUpload").prop('disabled', true);
+            $("#modfwuploadinfo").text("Lade hoch … (" + bin.length + " Byte)");
+            fetch(url, { method: "POST", body: bin, headers: { "Content-Type": "application/octet-stream" }, credentials: "same-origin" })
+                .then(function (r) {
+                    return r.text().then(function (t) {
+                        try { return JSON.parse(t); } catch (e) { return { ok: 0, message: "Fehler HTTP " + r.status + ": " + t.substr(0, 120) }; }
+                    });
+                })
+                .then(function (d) { $("#modfwuploadinfo").text(d.message); if (d.ok) { $("#modfwfile").val(""); modFwReloadList(); } })
+                .catch(function (e) { $("#modfwuploadinfo").text("Hochladen fehlgeschlagen (" + e + ") \u2013 Seite neu laden und nochmal versuchen"); })
+                .finally(function () { $("#ModFwUpload").prop('disabled', false); });
+        };
+        if (isHex) { reader.readAsText(f); } else { reader.readAsArrayBuffer(f); }
+        return true;
     });
 
     function otaSetBar(pct, busy) {
@@ -2011,11 +2260,8 @@ $(function () {
     });
 
 
-    $("#avrprogrammer").click(function () {
-        $(".header-right a").removeClass("active");
-        $(this).addClass("active");
-        switchPage("#avrprogPage");
-
+    // Firmware-Liste fuer Legacy-ISP und Ketten-Update laden (Seite Utilities)
+    function avrProgLoad() {
         $.getJSON("/api/avrstorage",
             function (data) {
                 $("#avrprog").empty();
@@ -2038,6 +2284,8 @@ $(function () {
 
                 if (data.avrprog.avrprog) {
                     $.each(data.avrprog.avrprog, function (index, value) {
+                        // ATtiny1624-Firmware (Ketten-Update) gehoert nicht in die ISP-Liste
+                        if (value.chain == 1) { return; }
 
                         var li = document.createElement("li");
                         $("#avrprog").append(li);
@@ -2055,11 +2303,11 @@ $(function () {
                         $(li).append(aref);
                     });
                 }
+                modFwReloadList();
+                modFwStatusUpdate();
             }).fail(function () { $.notify("Request failed", { autoHide: true, globalPosition: 'top right', className: 'error' }); }
             );
-
-        return true;
-    });
+    }
 
 
     $("#charging").click(function () {
@@ -2434,6 +2682,8 @@ $(function () {
 
     //Automatically open correct sub-page based on hash
     let hash = $(location).attr('hash');
+    // alte Lesezeichen: die Update-Seite ist jetzt Teil von Utilities
+    if (hash == "#avrprogrammer") { hash = "#utility"; }
     switch (hash) {
         case "#tiles":
         case "#modules":
@@ -2443,7 +2693,6 @@ $(function () {
         case "#integration":
         case "#currentmonitor":
         case "#storage":
-        case "#avrprogrammer":
         case "#utility":
         case "#history":
             $(hash).click();
