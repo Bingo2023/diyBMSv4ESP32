@@ -5,6 +5,7 @@ static constexpr const char *const TAG = "diybms-webpost";
 #include "webserver_json_post.h"
 #include "webserver_helper_funcs.h"
 #include <esp_netif.h>
+#include "esp32_ota.h"
 
 esp_err_t post_savebankconfig_json_handler(httpd_req_t *req, bool urlEncoded)
 {
@@ -143,10 +144,9 @@ Restart controller from web interface
 */
 esp_err_t post_restartcontroller_json_handler(httpd_req_t *req, bool urlEncoded)
 {
-    // Reboot!
-    ESP.restart();
-
-    return SendSuccess(req);
+    // Erst antworten, damit die Seite den Neustart abwarten kann (Utilities), dann neu starten
+    SendSuccess(req);
+    ESP32Ota_RestartAfterReply("Restart Controller");
 }
 
 esp_err_t post_saveinfluxdbsetting_json_handler(httpd_req_t *req, bool urlEncoded)

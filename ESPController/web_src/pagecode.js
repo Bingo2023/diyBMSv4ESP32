@@ -86,34 +86,6 @@ function upload_file() {
 
 }
 
-function upload_firmware() {
-    $("#progress").show();
-    $("#status_div").text("Upload in progress");
-    let data = document.getElementById("file_sel").files[0];
-    xhr = new XMLHttpRequest();
-    xhr.open("POST", "/ota", true);
-    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-    xhr.upload.addEventListener("progress", function (event) {
-        if (event.lengthComputable) {
-            document.getElementById("progress").style.width = (event.loaded / event.total) * 100 + "%";
-        }
-    });
-    xhr.onreadystatechange = function () {
-        if (xhr.readyState === XMLHttpRequest.DONE) {
-            let status = xhr.status;
-            if (status >= 200 && status < 400) {
-                $("#status_div").text("Upload accepted. BMS will reboot.");
-            } else {
-                $("#status_div").text("Upload rejected!");
-            }
-            $("#progress").hide();
-        }
-    };
-    xhr.send(data);
-    return false;
-}
-
-
 function CalculateChargeCurrent(value1, value2, highestCellVoltage, maximumchargecurrent, kneemv, cellmaxmv) {
     if (highestCellVoltage < kneemv) {
         // Voltage is below the knee voltage, so use full current
@@ -1936,7 +1908,108 @@ $(function () {
         switchPage("#utilityPage");
 
         $("#setsoc").val(75.5);
+        otaRefreshCurrent();
     });
+
+    function otaSetBar(pct, busy) {
+        $("#otaprog").show().toggleClass("busy", !!busy);
+        $("#otaprog > div").css("width", pct + "%");
+    }
+
+    // alle Zeiten in Sekunden
+    function otaFmtUptime(sec) {
+        return Math.max(0, Math.round(sec || 0)) + " s";
+    }
+
+    // Anzeige "Speicherplatz app0/app1, läuft seit ..." neben der Version
+    function otaShowCurrent(d) {
+        var v = $("#otaver").text();
+        if (v.length > 8) { $("#otaver").text(v.substring(0, 8)).attr("title", v); }
+        if (d && d.part !== undefined) {
+            $("#otacur").text(", Speicherplatz " + d.part + ", läuft seit " + otaFmtUptime(d.uptime));
+        }
+    }
+
+    // Nach dem Firmware-Update bzw. "Restart Controller": warten bis der Controller neu
+    // gestartet ist, dann Seite neu laden. Neu gestartet = Laufzeit kleiner als die Wartezeit,
+    // oder "Invalid cookie" (400, neuer Sitzungsschluessel nach dem Neustart).
+    //   started   Zeitpunkt (Date.now()) der Neustart-Anforderung
+    //   info      Element fuer die Meldungen
+    //   onTimeout wird nach 60 s ohne Neustart aufgerufen (Knoepfe wieder freigeben usw.)
+    function ctrlWaitForRestart(started, info, onTimeout) {
+        var waited = Math.round((Date.now() - started) / 1000);
+        var next = function () {
+            if (waited >= 60) {
+                $(info).text("Controller hat sich nach 60 s nicht neu gemeldet – Display prüfen bzw. Controller einmal aus/ein schalten, dann Seite neu laden (F5).");
+                if (onTimeout) { onTimeout(); }
+                return;
+            }
+            $(info).text("Controller startet neu … " + waited + " s");
+            setTimeout(ctrlWaitForRestart, 1000, started, info, onTimeout);
+        };
+        $.ajax({ type: "GET", url: "/api/otastatus", dataType: "json", timeout: 2000, cache: false })
+            .done(function (d) {
+                if (d && d.uptime !== undefined && d.uptime <= waited + 5) {
+                    $(info).text("Controller neu gestartet (Speicherplatz " + d.part + ") – Seite wird neu geladen …");
+                    setTimeout(function () { location.reload(); }, 1500);
+                    return;
+                }
+                next();
+            })
+            .fail(function (x) {
+                if (x && x.status == 400) {
+                    $(info).text("Controller neu gestartet – Seite wird neu geladen …");
+                    setTimeout(function () { location.reload(); }, 1000);
+                    return;
+                }
+                next();
+            });
+    }
+
+    function otaRefreshCurrent() {
+        $.ajax({ type: "GET", url: "/api/otastatus", dataType: "json", timeout: 3000, cache: false }).done(otaShowCurrent);
+    }
+
+    $("#OtaUpload").click(function () {
+        var f = $("#otafile")[0].files[0];
+        if (!f) { $("#otainfo").text("Bitte zuerst die Datei diybms_controller_firmware_*.bin wählen."); return true; }
+        if (f.size > 0x1B0000) { $("#otainfo").text("Datei zu groß – ist das das 4-MB-Komplettimage? Bitte diybms_controller_firmware_*.bin verwenden."); return true; }
+        if (!confirm("Controller-Firmware jetzt mit '" + f.name + "' aktualisieren? Der Controller startet danach neu.")) { return true; }
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", "/ota?xss=" + encodeURIComponent(XSS_KEY), true);
+        xhr.setRequestHeader("Content-Type", "application/octet-stream");
+        otaSetBar(0, true);
+        $("#otainfo").text("Verbinde …");
+        $("#OtaUpload").prop('disabled', true);
+        xhr.upload.onprogress = function (e) {
+            if (e.lengthComputable) {
+                var p = Math.round(100 * e.loaded / e.total);
+                otaSetBar(Math.max(2, Math.min(p, 99)), p >= 99);
+                $("#otainfo").text(p >= 99 ? "Prüfe Firmware …" : "Übertrage und schreibe … " + p + " %");
+            }
+        };
+        xhr.onload = function () {
+            var d;
+            try { d = JSON.parse(xhr.responseText); } catch (e) { d = { ok: 0, message: "Fehler HTTP " + xhr.status }; }
+            if (d.ok) {
+                otaSetBar(100, true);
+                $("#otainfo").text(d.message);
+                var t0 = Date.now();
+                setTimeout(ctrlWaitForRestart, 2000, t0, "#otainfo", function () {
+                    otaSetBar(100, false);
+                    $("#OtaUpload").prop('disabled', false);
+                });
+            } else {
+                otaSetBar(0, false);
+                $("#otainfo").text(d.message);
+                $("#OtaUpload").prop('disabled', false);
+            }
+        };
+        xhr.onerror = function () { otaSetBar(0, false); $("#otainfo").text("Übertragung fehlgeschlagen – Seite neu laden und nochmal versuchen"); $("#OtaUpload").prop('disabled', false); };
+        xhr.send(f);
+        return true;
+    });
+
 
     $("#avrprogrammer").click(function () {
         $(".header-right a").removeClass("active");
@@ -2135,6 +2208,22 @@ $(function () {
         });
     });
 
+    // Restart Controller: wie nach dem Firmware-Update auf den Neustart warten und neu laden
+    $("#restartControllerForm").unbind('submit').submit(function (e) {
+        e.preventDefault();
+        $("#restartControllerForm button").prop('disabled', true);
+        $("#restartinfo").text("Neustart angefordert …");
+        var t0 = Date.now();
+        $.ajax({ type: 'POST', url: '/post/restartcontroller', data: $(this).serialize(), timeout: 5000 })
+            .always(function () {
+                setTimeout(ctrlWaitForRestart, 2000, t0, "#restartinfo", function () {
+                    $("#restartControllerForm button").prop('disabled', false);
+                });
+            });
+        return false;
+    });
+
+
     $("#haForm").unbind('submit').submit(function (e) {
         e.preventDefault();
 
@@ -2151,6 +2240,7 @@ $(function () {
             },
         });
     });
+
 
 
     $("#rulesForm").unbind('submit').submit(function (e) {
@@ -2272,7 +2362,7 @@ $(function () {
     });
 
     $.ajaxPrefilter(function (options, originalOptions, jqXHR) {
-        if (originalOptions.type.toUpperCase() !== 'POST' || options.type.toUpperCase() !== 'POST') {
+        if ((originalOptions.type || 'GET').toUpperCase() !== 'POST' || (options.type || 'GET').toUpperCase() !== 'POST') {
             return;
         }
 
@@ -2300,8 +2390,6 @@ $(function () {
         timer_postTileVisibiltity = setTimeout(postTileVisibiltity, 3500);
     });
 
-    $("#file_sel").change(function () { upload_firmware(); });
-    $("#uploadfw").click(function () { $("#file_sel").click(); });
 
     $("#uploadfile").click(function () { $("#uploadfile_sel").click(); });
     $("#uploadfile_sel").change(function () { upload_file(); });
