@@ -36,7 +36,6 @@
       <a id="integration" href="#integration">Integration</a>
       <a id="currentmonitor" href="#currentmonitor">Current Monitor</a>
       <a id="storage" href="#storage">Storage &amp; Logging</a>
-      <a id="avrprogrammer" href="#avrprogrammer">AVR Programmer</a>
       <a id="utility" href="#utility">Utilitites</a>
       <a id="about" href="#about">About</a>
     </div>
@@ -1589,6 +1588,91 @@
       <div class="prog" id="otaprog"><div></div></div>
       <p id="otainfo" class="note"></p>
     </div>
+    <div class="progcols">
+      <div class="region progcol" id="legacyregion">
+        <h2 id="lg1">AVR Programmer (ATtiny841) <span class="badge" id="lg2">ISP cable</span></h2>
+        <p class="note" id="lg3">Modules V4.0&ndash;V4.4 with ATtiny841, programmed one by one via the ISP connector on the controller. ATtiny1624 firmware is uploaded on the right.</p>
+        <p id="b11">Controller can program modules and devices using the files below. <strong>Do not
+            connect</strong> a
+          device to be programmed before enabling programming mode.</p>
+        <p>Instructions:
+          <ol>
+            <li>"Enable programming mode", this will stop SD card logging and TFT touch screen response.
+            </li>
+            <li>Select the relevant file to program</li>
+            <li>Read the warnings</li>
+            <li>Attach/connect device to be programmed to the ISP connector on the controller</li>
+            <li>Select "Program Device"</li>
+            <li>When complete, remove the device</li>
+            <li>Program other devices as needed</li>
+            <li>Disable programming mode</li>
+          </ol>
+        </p>
+        <ul id="avrprog">
+
+        </ul>
+        <div>
+          <button type="button" id="AVRProgEnable">Enable programming mode</button>
+          <button type="button" id="AVRProgDisable">Disable programming mode</button>
+        </div>
+        <div id="avrprogconfirm">
+          <input type="hidden" value="" id="selectedavrindex" />
+          <img class="warnicon" src="warning.png" width="48" height="41" alt="Warning" />
+          <ul>
+            <li>Ensure you disconnect all battery and communication cables from the module/device before
+              programming.</li>
+            <li>Connect the module to the ISP port on the controller using a ribbon cable or adapter, ensure
+              the
+              notch is
+              aligned with pin 1 on the module.</li>
+            <li>Click 'Program Device' to start programming</li>
+            <li>Remove cable as soon as programming is complete</li>
+          </ul>
+          <button type="button" id="ProgAVR">Program Device</button>
+          <button type="button" id="ProgAVRCancel">Cancel</button>
+          <p id='avrinfo'></p>
+        </div>
+      </div>
+      <div class="region progcol" id="modfwregion">
+        <h2 id="mf1">ATtiny1624 &ndash; update all modules <span class="badge new" id="mf2">RX/TX chain</span></h2>
+        <p class="note" id="mf3">For modules with bootloader (V450_BL_*). The modules stay connected. Every module
+          compares its own firmware; modules that differ are updated one after the other, the others only
+          forward packets and keep measuring. Settings (calibration, bypass) are kept.</p>
+
+        <h3 id="mf4">1. Upload firmware</h3>
+        <div class="modfwupload">
+          <input type="file" id="modfwfile" accept=".bin,.hex" />
+          <select id="modfwbaud" title="Baud rate of the firmware">
+            <option value="10000">10K (10000)</option>
+            <option value="5000">5K (5000)</option>
+            <option value="9600">9K6 (9600)</option>
+            <option value="2400">Standard (2400)</option>
+          </select>
+          <button type="button" id="ModFwUpload">Upload</button>
+          <p id="modfwuploadinfo" class="note">.bin from <code>ATTINYCellModule/firmware_upload</code> or .hex
+            (also &quot;_with_bootloader.hex&quot;)</p>
+        </div>
+
+        <h3 id="mf5">2. Select firmware</h3>
+        <div id="modfwfiles" class="modfwlist"></div>
+        <p id="modfwwarn" class="warnline"></p>
+
+        <h3 id="mf6">3. Update all modules</h3>
+        <div>
+          <input type="hidden" value="" id="modfwindex" />
+          <button type="button" id="ModFwStart" disabled>Start update</button>
+          <button type="button" id="ModFwAbort">Abort</button>
+          <button type="button" id="ModFwCheck">Check modules</button>
+        </div>
+        <p id="modfwhead"></p>
+        <div class="prog" id="modfwprog"><div></div></div>
+        <p id="modfwinfo" class="note"></p>
+        <table id="modfwtable" class="mods">
+          <thead><tr><th id="mf7">Module</th><th id="mf8">Status</th><th id="mf9">Duration</th><th id="mf10">Retransmissions</th><th id="mf11">Firmware in module</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <div class="page" id="settingsPage">
@@ -1846,52 +1930,6 @@
     </div>
 
     <!-- End of page-->
-  </div>
-
-  <div class="page" id="avrprogPage">
-    <h1>AVR Programmer</h1>
-    <div class="region">
-      <p id="b11">
-        Controller can program modules and devices using the files below.
-        <strong>Do not connect</strong>
-        a device to be programmed before enabling programming mode.
-      </p>
-      <p>Instructions:</p>
-      <ol>
-        <li>"Enable programming mode", this will stop SD card logging and TFT touch screen response.</li>
-        <li>Select the relevant file to program</li>
-        <li>Read the warnings</li>
-        <li>Attach/connect device to be programmed to the ISP connector on the controller</li>
-        <li>Select "Program Device"</li>
-        <li>When complete, remove the device</li>
-        <li>Program other devices as needed</li>
-        <li>Disable programming mode</li>
-      </ol>
-
-      <ul id="avrprog"></ul>
-      <div>
-        <button type="button" id="AVRProgEnable">Enable programming mode</button>
-        <button type="button" id="AVRProgDisable">Disable programming mode</button>
-      </div>
-      <div id="avrprogconfirm">
-        <input type="hidden" value="" id="selectedavrindex" />
-        <img class="warnicon" src="warning.png" width="48" height="41" alt="Warning" />
-        <ul>
-          <li>
-            Ensure you disconnect all battery and communication cables from the module/device before programming.
-          </li>
-          <li>
-            Connect the module to the ISP port on the controller using a ribbon cable or adapter, ensure the notch is
-            aligned with pin 1 on the module.
-          </li>
-          <li>Click 'Program Device' to start programming</li>
-          <li>Remove cable as soon as programming is complete</li>
-        </ul>
-        <button type="button" id="ProgAVR">Program Device</button>
-        <button type="button" id="ProgAVRCancel">Cancel</button>
-        <p id="avrinfo"></p>
-      </div>
-    </div>
   </div>
 
   <div class="page" id="storagePage">
