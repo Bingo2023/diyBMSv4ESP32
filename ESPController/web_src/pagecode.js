@@ -519,7 +519,7 @@ function configureModule(button, cellid, attempts) {
 
                 //Populate settings div
                 $('#ModuleId').val(data.settings.id);
-                $('#Version').html(data.settings.ver.toString() + ' / <a href="https://github.com/stuartpittaway/diyBMSv4ESP32/commit/' + data.settings.code.toString(16) + '" rel="noreferrer" target="_blank">' + data.settings.code.toString(16) + '</a>');
+                $('#Version').text(data.settings.ver.toString() + ' / ' + data.settings.code.toString(16));
                 $('#BypassOverTempShutdown').val(data.settings.BypassOverTempShutdown);
                 $('#BypassThresholdmV').val(data.settings.BypassThresholdmV);
                 $('#Calib').val(data.settings.Calib.toFixed(4));
@@ -531,14 +531,10 @@ function configureModule(button, cellid, attempts) {
                 if (data.settings.Prohibited) {
                     $('#ActualVoltage').attr('disabled', 'disabled');
                     $('#Calib').attr('disabled', 'disabled');
-                    $('#BypassThresholdmV').attr('disabled', 'disabled');
-                    $('#BypassOverTempShutdown').attr('disabled', 'disabled');
                     $('#CalculateCalibration').hide();
                 } else {
                     $('#ActualVoltage').removeAttr('disabled');
                     $('#Calib').removeAttr('disabled');
-                    $('#BypassThresholdmV').removeAttr('disabled');
-                    $('#BypassOverTempShutdown').removeAttr('disabled');
                     $('#CalculateCalibration').show();
                 }
 
