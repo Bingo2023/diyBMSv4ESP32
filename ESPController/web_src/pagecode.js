@@ -200,6 +200,51 @@ function switchPage(newPage) {
     $("#myNav").height("0%");
 }
 
+// Column "Firmware" on the Modules page: firmware checksum per module (FW_CMD_REPORT)
+var moduleFwCrc = [];
+var modulesFwNotify = true; // notify once per check
+function modulesFwFill() {
+    // find the most common checksum, mark modules that differ
+    var count = {}, best = "", bestn = 0;
+    $.each(moduleFwCrc, function (i, c) { if (c) { count[c] = (count[c] || 0) + 1; if (count[c] > bestn) { bestn = count[c]; best = c; } } });
+    $("#modulesRows > tr").each(function (index) {
+        var td = $(this).find("td.fw");
+        var c = index < moduleFwCrc.length ? moduleFwCrc[index] : "";
+        td.text(c ? c : "\u2013").toggleClass("crcdiff", !!c && c !== best);
+    });
+    // warning if modules run different firmware
+    var diff = [];
+    $.each(moduleFwCrc, function (i, c) { if (c && c !== best) { diff.push("module " + i + " (" + c + ")"); } });
+    if (diff.length > 0) {
+        $("#modfwdiff").text("Warning: different firmware - " + diff.join(", ") + ". Most modules have " + best +
+            ". Use Utilities > ATtiny1624 - update all modules to bring all modules to the same firmware.").show();
+    } else {
+        $("#modfwdiff").hide();
+    }
+    return diff.length;
+}
+function modulesFwRefresh() {
+    $.ajax({ type: "GET", url: "/api/modfwstatus", dataType: "json", timeout: 3000, cache: false })
+        .done(function (d) {
+            moduleFwCrc = d.fwcrc || [];
+            var ndiff = modulesFwFill();
+            // after a check also show a notification at the top right
+            if (ndiff > 0 && d.fwcrcbusy != 1 && modulesFwNotify) {
+                modulesFwNotify = false;
+                $.notify("Different firmware in " + ndiff + " module(s) - see Modules page", { autoHide: false, globalPosition: 'top right', className: 'warn' });
+            }
+            if (d.fwcrcbusy == 1 && $('#modulesPage').is(':visible')) {
+                $("#modcheckinfo").text("running ...");
+                setTimeout(modulesFwRefresh, 700);
+            } else {
+                // -1 (or implausible) = not checked since start up
+                var age = Number(d.fwcrcage);
+                $("#modcheckinfo").text(age >= 0 && age < 10000000 ? age + " s ago" : "-");
+                $("#ModCheckFw").prop('disabled', false);
+            }
+        });
+}
+
 function identifyModule(button, cellid) {
     $.getJSON("/api/identifyModule", { c: cellid }, function (data) { showActionSuccess(); }).fail(function () { $("#iperror").show(); });
 }
@@ -889,9 +934,11 @@ function updateChart(jsondata) {
                     + bank[index]
                     + "</td><td>" + value + "</td><td></td><td class='hide'></td><td class='hide'></td>"
                     + "<td class='hide'></td><td class='hide'></td><td class='hide'></td><td class='hide'></td><td class='hide'></td><td class='hide'></td>"
+                    + "<td class='fw'></td>"
                     + "<td><button type='button' onclick='return identifyModule(this," + index + ");'>Identify</button>"
                     + "<button type='button' onclick='return configureModule(this," + index + ",10);'>Configure</button></td></tr>")
             });
+            modulesFwFill();
         }
 
         var rows = $(tbody).find("tr");
@@ -1491,6 +1538,7 @@ $(function () {
         $("#settingConfig").hide();
 
         switchPage("#modulesPage");
+        modulesFwRefresh();
 
         $.getJSON("/api/settings",
             function (data) {
@@ -2012,6 +2060,16 @@ $(function () {
             }
         });
     }
+
+    // Modules page: query the firmware checksum of all modules
+    $("#ModCheckFw").click(function () {
+        $("#ModCheckFw").prop('disabled', true);
+        modulesFwNotify = true;
+        $("#modcheckinfo").text("running ...");
+        $.ajax({ type: 'POST', url: '/post/modfwcheck', data: {}, timeout: 10000 })
+            .always(function () { setTimeout(modulesFwRefresh, 700); });
+        return true;
+    });
 
     $("#ModFwCheck").click(function () {
         $.ajax({ type: 'POST', url: '/post/modfwcheck', data: {}, timeout: 10000 })
@@ -2691,6 +2749,8 @@ $(function () {
 
     //On page ready
     queryBMS();
+    // report different module firmware (last check) on every page
+    setTimeout(modulesFwRefresh, 3000);
 
     //Automatically open correct sub-page based on hash
     let hash = $(location).attr('hash');
