@@ -140,3 +140,7 @@ td.st5{color:#7CFC00}td.st4{color:#1e90ff}td.st6{color:#ff6347;font-weight:bold}
 td.crcok{color:#7CFC00;font-family:monospace}td.crcdiff{color:#ffb347;font-family:monospace}
 .warnline{color:#ffb347;margin:4px 0}
 .progcols{clear:both}
+#globalConfig .gcrow{display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap}
+#globalConfig .gcrow>form{flex:0 1 auto;width:auto}#globalConfig .gcrow>.modcheck{flex:1 1 200px}
+.modcheck{padding-top:4px}.modcheck .note{margin:6px 0}
+#modulesRows td.fw{font-family:monospace}

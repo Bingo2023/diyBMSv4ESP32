@@ -1062,7 +1062,8 @@ int ModuleFwUpdate_StatusJson(char *buf, size_t size)
     doc["msg"] = moduleFwUpdate.message();
     doc["ctrlbaud"] = fwupd_ctrl_baud;
     doc["eta"] = moduleFwUpdate.remainingSeconds();
-    doc["fwcrcage"] = fwcrc_time ? (millis() - fwcrc_time) / 1000 : -1;
+    // -1 = not checked since start up (int32: the expression must not become unsigned)
+    doc["fwcrcage"] = (fwcrc_time != 0 && fwcrc_total > 0) ? (int32_t)((millis() - fwcrc_time) / 1000UL) : (int32_t)-1;
     doc["fwcrcbusy"] = fwcrc_next < fwcrc_total ? 1 : 0;
     JsonArray fc = doc["fwcrc"].to<JsonArray>();
     for (uint8_t m = 0; m < fwcrc_total; m++)
