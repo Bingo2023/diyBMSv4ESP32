@@ -255,41 +255,38 @@ esp_err_t post_savesetting_json_handler(httpd_req_t *req, bool urlEncoded)
                 return SendFailure(req);
             }
 
-            uint8_t BypassOverTempShutdown = 0xFF;
-            uint16_t BypassThresholdmV = 0xFFFF;
+            // Bypass temperature and threshold are only set through the global settings
+            // (post_saveglobalsetting_json_handler). Always send "no change" here (the module
+            // ignores 0xFF / 0xFFFF), even if the page sends values.
+            const uint8_t BypassOverTempShutdown = 0xFF;
+            const uint16_t BypassThresholdmV = 0xFFFF;
             float Calibration = 0xFFFF;
 
-            if (GetKeyValue(httpbuf, "BypassOverTempShutdown", &BypassOverTempShutdown, urlEncoded))
+            if (GetKeyValue(httpbuf, "Calib", &Calibration, urlEncoded))
             {
-                if (GetKeyValue(httpbuf, "BypassThresholdmV", &BypassThresholdmV, urlEncoded))
+                if (prg.sendSaveSetting(m, BypassThresholdmV, BypassOverTempShutdown, Calibration))
                 {
-                    if (GetKeyValue(httpbuf, "Calib", &Calibration, urlEncoded))
+
+                    if (cmi[m].BoardVersionNumber == 490)
                     {
-                        if (prg.sendSaveSetting(m, BypassThresholdmV, BypassOverTempShutdown, Calibration))
-                        {
+                        int16_t FanSwitchOnT = 30;
+                        uint16_t RelayMinV = 1000;
+                        uint16_t RelayRangemV = 5;
+                        uint16_t RunAwayMinmV = 4000;
+                        uint16_t RunAwayDiffmV = 100;
 
-                            if (cmi[m].BoardVersionNumber == 490)
-                            {
-                                int16_t FanSwitchOnT = 30;
-                                uint16_t RelayMinV = 1000;
-                                uint16_t RelayRangemV = 5;
-                                uint16_t RunAwayMinmV = 4000;
-                                uint16_t RunAwayDiffmV = 100;
+                        GetKeyValue(httpbuf, "FanSwitchOnT", &FanSwitchOnT, urlEncoded);
+                        GetKeyValue(httpbuf, "RelayMinV", &RelayMinV, urlEncoded);
+                        GetKeyValue(httpbuf, "RelayRange", &RelayRangemV, urlEncoded);
 
-                                GetKeyValue(httpbuf, "FanSwitchOnT", &FanSwitchOnT, urlEncoded);
-                                GetKeyValue(httpbuf, "RelayMinV", &RelayMinV, urlEncoded);
-                                GetKeyValue(httpbuf, "RelayRange", &RelayRangemV, urlEncoded);
+                        GetKeyValue(httpbuf, "RunAwayMinmV", &RunAwayMinmV, urlEncoded);
+                        GetKeyValue(httpbuf, "RunAwayDiffmV", &RunAwayDiffmV, urlEncoded);
 
-                                GetKeyValue(httpbuf, "RunAwayMinmV", &RunAwayMinmV, urlEncoded);
-                                GetKeyValue(httpbuf, "RunAwayDiffmV", &RunAwayDiffmV, urlEncoded);
-
-                                prg.sendSaveAdditionalSetting(m, FanSwitchOnT, RelayMinV, RelayRangemV, RunAwayMinmV, RunAwayDiffmV);
-                            }
-
-                            clearModuleValues(m);
-                            return SendSuccess(req);
-                        }
+                        prg.sendSaveAdditionalSetting(m, FanSwitchOnT, RelayMinV, RelayRangemV, RunAwayMinmV, RunAwayDiffmV);
                     }
+
+                    clearModuleValues(m);
+                    return SendSuccess(req);
                 }
             }
         }
