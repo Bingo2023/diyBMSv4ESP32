@@ -4,6 +4,8 @@ static constexpr const char *const TAG = "diybms-rx";
 #include "PacketReceiveProcessor.h"
 #include "ModuleFirmwareUpdateTask.h"
 
+CalibCapture calibCapture = {0xFF, 0, 0, {0}};
+
 // Module is in the bootloader for a firmware update -> its values in the packet are invalid
 
 static inline bool SkipModule(uint8_t m)
@@ -269,7 +271,18 @@ void PacketReceiveProcessor::ProcessReplyVoltage()
 
     if (cellptr->voltagemV > 0)
     {
+      // Calibration capture: record replies of the selected module
+      if (calibCapture.module == _packetbuffer.start_address + i && calibCapture.count < calibCapture.wanted)
+      {
+        calibCapture.mV[calibCapture.count] = cellptr->voltagemV;
+        calibCapture.count = calibCapture.count + 1;
+      }
+
       cellptr->valid = true;
+      if (cellptr->settingsCached)
+      {
+        cellptr->voltageSinceSettings = true;
+      }
     }
   }
 }
@@ -297,6 +310,7 @@ void PacketReceiveProcessor::ProcessReplySettings()
 
   // TODO: Validate m here to prevent array overflow
   cmi[m].settingsCached = true;
+  cmi[m].voltageSinceSettings = false;
 
   FLOATUNION_t myFloat;
 
